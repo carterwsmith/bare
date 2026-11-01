@@ -45,6 +45,13 @@ data class HomeLayout(
 
     fun show(packageName: String) = copy(hidden = hidden - packageName)
 
+    /** Newly installed apps take the space after the existing apps. */
+    fun append(apps: List<LaunchableApp>, packageName: String): HomeLayout {
+        if (packageName in pinned || packageName in order) return this
+        val current = arrange(apps).map { it.packageName }.filterNot { it in pinned }
+        return copy(order = (current + order + packageName).distinct())
+    }
+
     /** Moves an app [offset] places within its group: pinned apps stay at the top. */
     fun move(apps: List<LaunchableApp>, packageName: String, offset: Int): HomeLayout {
         val isPinned = packageName in pinned

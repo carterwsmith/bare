@@ -20,16 +20,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             BareTheme {
-                val apps by viewModel.apps.collectAsStateWithLifecycle()
+                val grid by viewModel.grid.collectAsStateWithLifecycle()
                 val layout by viewModel.layout.collectAsStateWithLifecycle()
                 val hidden by viewModel.hidden.collectAsStateWithLifecycle()
                 val keepWatching by viewModel.keepWatching.collectAsStateWithLifecycle()
-                // Startup counts as finished once the app grid has something in it.
-                ReportDrawnWhen { apps.isNotEmpty() }
+                // An empty home is also ready once the app scan has finished.
+                ReportDrawnWhen { !grid.isLoading }
                 // This is the home screen; Back would only drop to Amazon's home behind it.
                 BackHandler {}
                 HomeScreen(
-                    apps = apps,
+                    tiles = grid.tiles,
+                    loading = grid.isLoading,
                     pinned = layout.pinned,
                     hidden = hidden,
                     keepWatching = keepWatching,
@@ -43,6 +44,11 @@ class MainActivity : ComponentActivity() {
                     // launcher, which Home on Fire bounces straight back from. This one opens
                     // the real Settings app, whose side menu reaches every other section.
                     onOpenSettings = { startActivity(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS)) },
+                    onConfirmInstall = { id ->
+                        startActivity(Intent(this@MainActivity, InstallActivity::class.java)
+                            .putExtra(InstallActivity.EXTRA_INSTALL_ID, id))
+                    },
+                    onDismissInstall = viewModel::dismissInstall,
                 )
             }
         }

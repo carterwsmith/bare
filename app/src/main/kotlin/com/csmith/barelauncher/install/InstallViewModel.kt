@@ -1,48 +1,45 @@
 package com.csmith.barelauncher.install
 
 import android.app.Application
+import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
 import com.csmith.barelauncher.BareLauncherApp
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import java.io.IOException
+import java.util.UUID
 
 class InstallViewModel(application: Application) : AndroidViewModel(application) {
-    private val installer = ApkInstaller(application, getApplication<BareLauncherApp>().http)
-    private val _state = MutableStateFlow<InstallState>(InstallState.Idle)
-    val state: StateFlow<InstallState> = _state.asStateFlow()
+    private val app = getApplication<BareLauncherApp>()
+    private val _error = MutableStateFlow<InstallError?>(null)
+    val error = _error.asStateFlow()
+    private var submitted = false
 
-    fun install(link: String) {
-        if (_state.value.isBusy) return
+    /** The URL screen closes once the foreground download service has started. */
+    fun install(link: String): Boolean {
+        if (submitted) return false
         val url = link.trim().toHttpUrlOrNull()
         if (url == null) {
-            _state.value = InstallState.Failed(InstallError.InvalidUrl, detail = null)
-            return
+            _error.value = InstallError.InvalidUrl
+            return false
         }
-        if (!getApplication<Application>().packageManager.canRequestPackageInstalls()) {
-            _state.value = InstallState.Failed(InstallError.InstallsNotAllowed, detail = null)
-            return
+        if (!app.packageManager.canRequestPackageInstalls()) {
+            _error.value = InstallError.InstallsNotAllowed
+            return false
         }
-        viewModelScope.launch {
-            _state.value = InstallState.Downloading(fraction = null)
-            try {
-                installer.install(url) { _state.value = InstallState.Downloading(it) }
-                _state.value = InstallState.Confirming
-            } catch (e: IOException) {
-                _state.value = InstallState.Failed(InstallError.DownloadFailed, e.message)
-            }
-        }
-    }
-
-    fun onInstallFinished(success: Boolean, message: String?) {
-        _state.value = if (success) {
-            InstallState.Installed
-        } else {
-            InstallState.Failed(InstallError.InstallFailed, message)
+        val id = UUID.randomUUID().toString()
+        app.installs.begin(id, url, InstallOrigin.Tv)
+        return try {
+            ContextCompat.startForegroundService(app, Intent(app, InstallService::class.java)
+                .putExtra(InstallService.EXTRA_ID, id)
+                .putExtra(InstallService.EXTRA_URL, url.toString()))
+            submitted = true
+            true
+        } catch (e: IllegalStateException) {
+            app.installs.fail(id, InstallError.InstallFailed, e.message)
+            _error.value = InstallError.InstallFailed
+            false
         }
     }
 }

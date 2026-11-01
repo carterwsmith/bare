@@ -21,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -32,10 +31,9 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.csmith.barelauncher.R
-import kotlin.math.roundToInt
 
 @Composable
-fun InstallScreen(state: InstallState, onInstall: (String) -> Unit) {
+fun InstallScreen(error: InstallError?, onInstall: (String) -> Unit) {
     var link by rememberSaveable { mutableStateOf("https://") }
     val linkFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { linkFocus.requestFocus() }
@@ -53,7 +51,9 @@ fun InstallScreen(state: InstallState, onInstall: (String) -> Unit) {
             modifier = Modifier.focusRequester(linkFocus),
         )
         Button(onClick = { onInstall(link) }) { Text(stringResource(R.string.install_button)) }
-        InstallStatus(state)
+        error?.let {
+            Text(stringResource(it.message), color = MaterialTheme.colorScheme.error)
+        }
     }
 }
 
@@ -88,25 +88,5 @@ private fun LinkField(
             keyboard?.hide()
             onGo()
         }),
-    )
-}
-
-@Composable
-private fun InstallStatus(state: InstallState) {
-    val text = when (state) {
-        InstallState.Idle -> return
-        is InstallState.Downloading -> when (val fraction = state.fraction) {
-            null -> stringResource(R.string.status_downloading)
-            else -> stringResource(R.string.status_downloading_percent, (fraction * 100).roundToInt())
-        }
-        InstallState.Confirming -> stringResource(R.string.status_confirming)
-        InstallState.Installed -> stringResource(R.string.status_installed)
-        is InstallState.Failed -> listOfNotNull(stringResource(state.error.message), state.detail)
-            .joinToString("\n")
-    }
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleMedium,
-        color = if (state is InstallState.Failed) MaterialTheme.colorScheme.error else Color.Unspecified,
     )
 }

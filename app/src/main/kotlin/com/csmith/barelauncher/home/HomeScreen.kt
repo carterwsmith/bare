@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,13 +58,15 @@ import androidx.tv.material3.Text
 import com.csmith.barelauncher.R
 
 private const val COLUMNS = 5
+private const val LOADING_ROWS = 4
 
 /** Keys that put a moving app down. */
 private val MOVE_DONE_KEYS = setOf(Key.DirectionCenter, Key.Enter, Key.Back, Key.Menu)
 
 @Composable
 fun HomeScreen(
-    apps: List<LaunchableApp>,
+    tiles: List<HomeTile>,
+    loading: Boolean,
     pinned: List<String>,
     hidden: List<LaunchableApp>,
     keepWatching: List<KeepWatchingItem>,
@@ -74,26 +77,30 @@ fun HomeScreen(
     onShow: (LaunchableApp) -> Unit,
     onInstallApk: () -> Unit,
     onOpenSettings: () -> Unit,
+    onConfirmInstall: (String) -> Unit,
+    onDismissInstall: (String) -> Unit,
 ) {
     val gridState = rememberLazyGridState()
-    val firstApp = remember { FocusRequester() }
-    var firstAppFocusRequests by remember { mutableIntStateOf(0) }
+    val firstTile = remember { FocusRequester() }
+    var firstTileFocusRequests by remember { mutableIntStateOf(0) }
     var menuFor by remember { mutableStateOf<LaunchableApp?>(null) }
     var showingHidden by remember { mutableStateOf(false) }
     var movingPackage by remember { mutableStateOf<String?>(null) }
+    var selectedInstall by remember { mutableStateOf<String?>(null) }
+    val installs = tiles.mapNotNull { (it as? HomeTile.Install)?.task }
 
-    // The cursor starts on the first app whenever the home screen comes back to the front,
+    // The cursor starts on the first tile whenever the home screen comes back to the front,
     // and returns there whenever the tile it was on goes away.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         movingPackage = null
-        firstAppFocusRequests++
+        firstTileFocusRequests++
     }
-    LaunchedEffect(firstAppFocusRequests, apps.isNotEmpty()) {
-        if (apps.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(firstTileFocusRequests, loading, tiles.isNotEmpty()) {
+        if (loading || tiles.isEmpty()) return@LaunchedEffect
         gridState.scrollToItem(0)
         // Wait one frame so the grid has laid out its first row.
         withFrameNanos {}
-        firstApp.requestFocus()
+        firstTile.requestFocus()
     }
 
     LazyVerticalGrid(
@@ -104,49 +111,78 @@ fun HomeScreen(
         horizontalArrangement = Arrangement.spacedBy(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        itemsIndexed(apps, key = { _, app -> app.packageName }) { index, app ->
-            AppCard(
-                app = app,
-                index = index,
-                pinned = app.packageName in pinned,
-                moving = app.packageName == movingPackage,
-                onClick = { onLaunch(app) },
-                onMenu = { menuFor = app },
-                onMoveBy = { offset -> onMove(app, offset) },
-                onMoveDone = { movingPackage = null },
-                modifier = if (index == 0) Modifier.focusRequester(firstApp) else Modifier,
-            )
-        }
-        if (keepWatching.isNotEmpty()) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Text(
-                    text = stringResource(R.string.keep_watching),
-                    modifier = Modifier.padding(top = 24.dp),
-                    style = MaterialTheme.typography.titleMedium,
+        if (loading) {
+            items(COLUMNS * LOADING_ROWS, key = { "skeleton:$it" }) {
+                Box(
+                    Modifier.aspectRatio(16f / 9f)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
                 )
             }
-            // A single row, lined up with the apps above it.
-            items(keepWatching.take(COLUMNS), key = { it.entry.id }) { item ->
-                // Opening the app brings back its existing screen, so an app still holding a
-                // paused episode returns to it.
-                WatchCard(item = item, onClick = { onLaunch(item.app) })
+        } else {
+            itemsIndexed(tiles, key = { _, tile -> tile.key }) { index, tile ->
+                val app = (tile as? HomeTile.App)?.app
+                AppCard(
+                    tile = tile,
+                    index = index,
+                    pinned = app != null && app.packageName in pinned,
+                    moving = app != null && app.packageName == movingPackage,
+                    onClick = {
+                        when (tile) {
+                            is HomeTile.App -> onLaunch(tile.app)
+                            is HomeTile.Install -> selectedInstall = tile.task.id
+                        }
+                    },
+                    onMenu = {
+                        when (tile) {
+                            is HomeTile.App -> menuFor = tile.app
+                            is HomeTile.Install -> selectedInstall = tile.task.id
+                        }
+                    },
+                    onMoveBy = { offset -> app?.let { onMove(it, offset) } },
+                    onMoveDone = { movingPackage = null },
+                    modifier = if (index == 0) Modifier.focusRequester(firstTile) else Modifier,
+                )
             }
-        }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            // Set apart from the cards so the buttons don't read as another row of them.
-            Row(
-                modifier = Modifier.padding(top = 32.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Button(onClick = onInstallApk) { Text(stringResource(R.string.install_apk)) }
-                Button(onClick = onOpenSettings) { Text(stringResource(R.string.settings)) }
-                if (hidden.isNotEmpty()) {
-                    Button(onClick = { showingHidden = true }) {
-                        Text(stringResource(R.string.hidden_apps, hidden.size))
+            if (keepWatching.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        text = stringResource(R.string.keep_watching),
+                        modifier = Modifier.padding(top = 24.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+                // A single row, lined up with the apps above it.
+                items(keepWatching.take(COLUMNS), key = { it.entry.id }) { item ->
+                    // Opening the app brings back its existing screen, so an app still holding a
+                    // paused episode returns to it.
+                    WatchCard(item = item, onClick = { onLaunch(item.app) })
+                }
+            }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                // Set apart from the cards so the buttons don't read as another row of them.
+                Row(
+                    modifier = Modifier.padding(top = 32.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Button(onClick = onInstallApk) { Text(stringResource(R.string.install_apk)) }
+                    Button(onClick = onOpenSettings) { Text(stringResource(R.string.settings)) }
+                    if (hidden.isNotEmpty()) {
+                        Button(onClick = { showingHidden = true }) {
+                            Text(stringResource(R.string.hidden_apps, hidden.size))
+                        }
                     }
                 }
             }
         }
+    }
+
+    installs.find { it.id == selectedInstall }?.let { task ->
+        InstallTaskDialog(
+            task = task,
+            onConfirm = { onConfirmInstall(task.id) },
+            onRemove = { onDismissInstall(task.id) },
+            onDismiss = { selectedInstall = null },
+        )
     }
 
     menuFor?.let { app ->
@@ -164,7 +200,7 @@ fun HomeScreen(
             onHide = {
                 onHide(app)
                 menuFor = null
-                firstAppFocusRequests++
+                firstTileFocusRequests++
             },
             onDismiss = { menuFor = null },
         )
@@ -177,7 +213,7 @@ fun HomeScreen(
                 if (hidden.size == 1) {
                     // That was the last one, and the Hidden apps button goes with it.
                     showingHidden = false
-                    firstAppFocusRequests++
+                    firstTileFocusRequests++
                 }
             },
             onDismiss = { showingHidden = false },
@@ -187,7 +223,7 @@ fun HomeScreen(
 
 @Composable
 private fun AppCard(
-    app: LaunchableApp,
+    tile: HomeTile,
     index: Int,
     pinned: Boolean,
     moving: Boolean,
@@ -228,7 +264,10 @@ private fun AppCard(
         },
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            AppArtwork(app)
+            when (tile) {
+                is HomeTile.App -> AppArtwork(tile.app)
+                is HomeTile.Install -> InstallArtwork(tile.task)
+            }
             if (pinned) PinBadge(Modifier.align(Alignment.TopEnd).padding(6.dp))
             if (moving) MoveArrows()
         }

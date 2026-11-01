@@ -19,11 +19,22 @@
     <string name="install_button">Download and install</string>
     <string name="status_downloading">Downloading…</string>
     <string name="status_downloading_percent">Downloading… %1$d%%</string>
-    <string name="status_confirming">Confirm the install on screen.</string>
+    <string name="status_transferring">Sending to TV…</string>
+    <string name="status_transferring_percent">Sending to TV… %1$d%%</string>
+    <string name="status_verifying">Verifying…</string>
+    <string name="status_installing">Installing…</string>
+    <string name="status_confirming">Confirm install</string>
     <string name="status_installed">Installed. It\'s on your home screen now.</string>
 
     <string name="error_invalid_url">That isn\'t a valid link. It must start with https://</string>
     <string name="error_installs_not_allowed">Bare Launcher isn\'t allowed to install apps yet. Turn it on in Settings › My Fire TV › Developer Options › Install Unknown Apps.</string>
     <string name="error_download_failed">The download failed.</string>
+    <string name="error_transfer_failed">Could not send the APK to the TV.</string>
+    <string name="error_invalid_apk">The download is not a valid APK.</string>
     <string name="error_install_failed">The install failed.</string>
+    <string name="error_install_cancelled">The install was cancelled.</string>
+    <string name="install_notifications">App downloads</string>
+    <string name="close">Close</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="confirm_install">Confirm install</string>
 </resources>
