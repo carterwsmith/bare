@@ -2,6 +2,8 @@
 
 A simple home screen for Fire TV
 
+![Bare Launcher running on a Hisense Fire TV](docs/tv-home.png)
+
 ## Set up
 
 1. On the TV, go to **Settings › Device & Software › About** and press OK on the TV's name 7 times. (On some devices the menu is called **My Fire TV** instead.)
@@ -15,3 +17,4 @@ A simple home screen for Fire TV
 - **Menu** on an app: move, pin or hide it.
 - **Long-press Home**: Amazon's home screen.
 - **To update:** run the setup script again.
+- **Install an APK from a URL:** run `scripts/install-apk.sh "<apk-url>" <tv-address>`.
