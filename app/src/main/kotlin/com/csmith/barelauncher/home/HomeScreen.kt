@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -95,48 +96,56 @@ fun HomeScreen(
         firstApp.requestFocus()
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(COLUMNS),
-            modifier = Modifier.weight(1f),
-            state = gridState,
-            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            itemsIndexed(apps, key = { _, app -> app.packageName }) { index, app ->
-                AppCard(
-                    app = app,
-                    index = index,
-                    pinned = app.packageName in pinned,
-                    moving = app.packageName == movingPackage,
-                    onClick = { onLaunch(app) },
-                    onMenu = { menuFor = app },
-                    onMoveBy = { offset -> onMove(app, offset) },
-                    onMoveDone = { movingPackage = null },
-                    modifier = if (index == 0) Modifier.focusRequester(firstApp) else Modifier,
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(COLUMNS),
+        modifier = Modifier.fillMaxSize(),
+        state = gridState,
+        contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        itemsIndexed(apps, key = { _, app -> app.packageName }) { index, app ->
+            AppCard(
+                app = app,
+                index = index,
+                pinned = app.packageName in pinned,
+                moving = app.packageName == movingPackage,
+                onClick = { onLaunch(app) },
+                onMenu = { menuFor = app },
+                onMoveBy = { offset -> onMove(app, offset) },
+                onMoveDone = { movingPackage = null },
+                modifier = if (index == 0) Modifier.focusRequester(firstApp) else Modifier,
+            )
+        }
+        if (keepWatching.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    text = stringResource(R.string.keep_watching),
+                    modifier = Modifier.padding(top = 24.dp),
+                    style = MaterialTheme.typography.titleMedium,
                 )
             }
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                // Set apart from the apps so the buttons don't read as another row of them.
-                Row(
-                    modifier = Modifier.padding(top = 32.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Button(onClick = onInstallApk) { Text(stringResource(R.string.install_apk)) }
-                    Button(onClick = onOpenSettings) { Text(stringResource(R.string.settings)) }
-                    if (hidden.isNotEmpty()) {
-                        Button(onClick = { showingHidden = true }) {
-                            Text(stringResource(R.string.hidden_apps, hidden.size))
-                        }
+            // A single row, lined up with the apps above it.
+            items(keepWatching.take(COLUMNS), key = { it.entry.id }) { item ->
+                // Opening the app brings back its existing screen, so an app still holding a
+                // paused episode returns to it.
+                WatchCard(item = item, onClick = { onLaunch(item.app) })
+            }
+        }
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            // Set apart from the cards so the buttons don't read as another row of them.
+            Row(
+                modifier = Modifier.padding(top = 32.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Button(onClick = onInstallApk) { Text(stringResource(R.string.install_apk)) }
+                Button(onClick = onOpenSettings) { Text(stringResource(R.string.settings)) }
+                if (hidden.isNotEmpty()) {
+                    Button(onClick = { showingHidden = true }) {
+                        Text(stringResource(R.string.hidden_apps, hidden.size))
                     }
                 }
             }
-        }
-        if (keepWatching.isNotEmpty()) {
-            // Opening the app brings back its existing screen, so an app still holding a
-            // paused episode returns to it.
-            KeepWatchingRow(items = keepWatching, onOpen = { onLaunch(it.app) })
         }
     }
 

@@ -33,13 +33,14 @@ private const val FINISHED_PROGRESS = 0.95f
 /** Apps report their playback position often, so writes to disk are batched. */
 private const val SAVE_DELAY_MS = 2_000L
 
-private const val ARTWORK_WIDTH = 512
+/** Artwork is kept at most this wide; the cards are much smaller. */
+internal const val ARTWORK_WIDTH = 512
 
 /** What's been watched across apps, newest first. Kept on disk so it survives restarts. */
 class WatchHistory(filesDir: File, private val scope: CoroutineScope) {
-    private val file = AtomicFile(File(filesDir, "watch-history.json"))
+    private val file = AtomicFile(File(filesDir, "keep-watching.json"))
     private val artworkDir = File(filesDir, "artwork")
-    // One writer at a time, so artwork and history writes never race each other.
+    // One thing at a time, in the order it was asked for, so nothing on disk races.
     private val disk = Dispatchers.IO.limitedParallelism(1)
 
     private val _entries = MutableStateFlow(load())
@@ -47,25 +48,24 @@ class WatchHistory(filesDir: File, private val scope: CoroutineScope) {
 
     init {
         scope.launch(disk) {
-            _entries.drop(1).collectLatest { entries ->
+            _entries.drop(1).collectLatest {
                 delay(SAVE_DELAY_MS)
-                save(entries)
+                save()
             }
         }
     }
 
     fun record(entry: WatchEntry, artwork: Bitmap?) {
         if (entry.positionMs < MIN_WATCHED_MS) return
-        if (entry.progress?.let { it >= FINISHED_PROGRESS } == true) {
-            _entries.update { current -> current.filterNot { it.id == entry.id } }
-            return
-        }
-        _entries.update { current ->
-            (listOf(entry) + current.filterNot { it.id == entry.id }).take(MAX_ENTRIES)
-        }
-        if (artwork != null) {
-            scope.launch(disk) {
-                if (!artworkFile(entry.id).exists()) saveArtwork(entry.id, artwork)
+        scope.launch(disk) {
+            if (entry.progress >= FINISHED_PROGRESS) {
+                _entries.update { current -> current.filterNot { it.id == entry.id } }
+                return@launch
+            }
+            // Saved before the entry is, so its card has the artwork from the moment it appears.
+            if (artwork != null && !artworkFile(entry.id).exists()) saveArtwork(entry.id, artwork)
+            _entries.update { current ->
+                (listOf(entry) + current.filterNot { it.id == entry.id }).take(MAX_ENTRIES)
             }
         }
     }
@@ -82,7 +82,9 @@ class WatchHistory(filesDir: File, private val scope: CoroutineScope) {
             emptyList()
         }
 
-    private fun save(entries: List<WatchEntry>) {
+    private fun save() {
+        // The latest entries, not the ones that started the wait: newer artwork may be on disk.
+        val entries = _entries.value
         file.write { it.write(Json.encodeToString(entries).toByteArray()); true }
         // Also clears out artwork of dropped entries and any half-written files.
         val kept = entries.map { artworkFile(it.id) }.toSet()

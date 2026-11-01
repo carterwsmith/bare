@@ -20,8 +20,7 @@ private const val BUFFER_SIZE = 64 * 1024
  * Streams an APK from a URL straight into a PackageInstaller session, so nothing is
  * staged on disk first. The system reports the outcome to [InstallActivity].
  */
-class ApkInstaller(private val context: Context) {
-    private val client = OkHttpClient()
+class ApkInstaller(private val context: Context, private val client: OkHttpClient) {
     private val packageInstaller = context.packageManager.packageInstaller
 
     suspend fun install(url: HttpUrl, onProgress: (Float?) -> Unit) = withContext(Dispatchers.IO) {

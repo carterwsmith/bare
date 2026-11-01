@@ -3,6 +3,7 @@ package com.csmith.barelauncher.install
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.csmith.barelauncher.BareLauncherApp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,7 +12,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.IOException
 
 class InstallViewModel(application: Application) : AndroidViewModel(application) {
-    private val installer = ApkInstaller(application)
+    private val installer = ApkInstaller(application, getApplication<BareLauncherApp>().http)
     private val _state = MutableStateFlow<InstallState>(InstallState.Idle)
     val state: StateFlow<InstallState> = _state.asStateFlow()
 
